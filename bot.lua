@@ -37,11 +37,9 @@ local function list_parsers()
 end
 
 
--- Токен бота
 local token = os.getenv("BOT_TOKEN") or '8077528195:AAGSA33_AWyyRbr47GLDzz7PB2aQKtUG95I'
 log("Используется токен: %s", token)
 
--- Подключаем библиотеки
 log("Загрузка библиотек...")
 local socket = require("socket")
 local json = require("cjson")
@@ -77,7 +75,6 @@ local function telegram_request(method, params)
     end
 end
 
--- Функция для отправки документа
 local function safe_send_document(chat_id, filepath, caption)
     chat_id = math.floor(tonumber(chat_id))
     log("Попытка отправки документа в chat_id: %d", chat_id)
@@ -110,7 +107,6 @@ local function safe_send(chat_id, text, disable_markdown)
         text = text
     }
 
-    -- Отключаем разметку если требуется или если текст содержит спецсимволы
     if not disable_markdown and not text:match("[_*`%[%](){}<>#+=|!-]") then
         params.parse_mode = "Markdown"
     end
@@ -160,12 +156,10 @@ local function exec_cmd(cmd, timeout, check_cancel)
     return result
 end
 
--- Кроссплатформенный поиск Python-файлов в папке tests
 local function list_python_files_in_tests()
     local test_dir = script_path .. "tests/"
     local files = {}
 
-    -- Проверка существования папки tests
     local is_windows = package.config:sub(1,1) == '\\'
     local check_cmd = is_windows and ('if exist "'..test_dir..'" (echo exists)') or ('test -d "'..test_dir..'" && echo exists')
     local p_check = io.popen(check_cmd, "r")
@@ -176,7 +170,6 @@ local function list_python_files_in_tests()
         return files, test_dir
     end
 
-    -- Команда для получения списка файлов
     local list_cmd = is_windows and ('dir /b "'..test_dir..'"') or ('ls "'..test_dir..'" 2>/dev/null')
     local p = io.popen(list_cmd)
     if p then
@@ -193,7 +186,6 @@ local function list_python_files_in_tests()
     return files, test_dir
 end
 
--- Обработка callback-запросов
 local function on_callback_query(callback, chat_id)
     local data = callback.data
     log("Получен callback_query от chat_id %d: %s", chat_id, data or "")
@@ -238,21 +230,18 @@ local function on_callback_query(callback, chat_id)
             if running_commands[chat_id] and running_commands[chat_id].cancel then
                 safe_send(chat_id, "❌ Выполнение скрипта отменено")
             else
-                -- Создаем временный файл
                 local temp_file = os.tmpname() .. ".txt"
                 local f = io.open(temp_file, "w")
                 if f then
                     f:write(res)
                     f:close()
 
-                    -- Отправляем как документ
                     safe_send_document(
                         chat_id,
                         temp_file,
                         "✅ Результат выполнения " .. script_name
                     )
 
-                    -- Удаляем временный файл
                     os.remove(temp_file)
                 else
                     safe_send(chat_id, "❌ Ошибка создания временного файла")
@@ -261,10 +250,65 @@ local function on_callback_query(callback, chat_id)
 
             running_commands[chat_id] = nil
         end
+        return
     end
+
+    if data:match("^runparser_") then
+        local parser_name = data:match("^runparser_(.+)")
+        local parser_file = script_path .. "../Parsers/parsers/" .. parser_name .. "/parser.py"
+        if not file_exists(parser_file) then
+            safe_send(chat_id, "❌ Парсер не найден: " .. parser_name)
+            telegram_request("answerCallbackQuery", {
+                callback_query_id = callback.id,
+                text = "Парсер не найден!"
+            })
+            return
+        end
+
+        telegram_request("answerCallbackQuery", {
+            callback_query_id = callback.id,
+            text = "Запускаю парсер..."
+        })
+
+        if running_commands[chat_id] then
+            running_commands[chat_id].cancel = true
+            socket.sleep(1)
+        end
+
+        safe_send(chat_id, "🚀 Запускаю парсер: " .. parser_name)
+        running_commands[chat_id] = { cancel = false }
+
+        local check_cancel = function()
+            return running_commands[chat_id] and running_commands[chat_id].cancel
+        end
+
+        local res = exec_cmd('python3 "' .. parser_file .. '"', 300, check_cancel)
+
+        if running_commands[chat_id] and running_commands[chat_id].cancel then
+            safe_send(chat_id, "❌ Выполнение парсера отменено")
+        else
+            local temp_file = os.tmpname() .. ".txt"
+            local f = io.open(temp_file, "w")
+            if f then
+                f:write(res)
+                f:close()
+                safe_send_document(
+                    chat_id,
+                    temp_file,
+                    "✅ Результат работы парсера " .. parser_name
+                )
+                os.remove(temp_file)
+            else
+                safe_send(chat_id, "❌ Ошибка создания временного файла")
+            end
+        end
+
+        running_commands[chat_id] = nil
+        return
+    end
+
 end
 
--- Обработка входящих сообщений
 local function on_message(message)
     local text = (message.text or ""):lower()
     local chat_id = message.chat and message.chat.id
@@ -417,59 +461,4 @@ local function run_bot()
     end
 end
 
-if data:match("^runparser_") then
-    local parser_name = data:match("^runparser_(.+)")
-    local parser_file = script_path .. "../Parsers/parsers/" .. parser_name .. "/parser.py"
-    if not file_exists(parser_file) then
-        safe_send(chat_id, "❌ Парсер не найден: " .. parser_name)
-        telegram_request("answerCallbackQuery", {
-            callback_query_id = callback.id,
-            text = "Парсер не найден!"
-        })
-        return
-    end
-
-    telegram_request("answerCallbackQuery", {
-        callback_query_id = callback.id,
-        text = "Запускаю парсер..."
-    })
-
-    if running_commands[chat_id] then
-        running_commands[chat_id].cancel = true
-        socket.sleep(1)
-    end
-
-    safe_send(chat_id, "🚀 Запускаю парсер: " .. parser_name)
-    running_commands[chat_id] = { cancel = false }
-
-    local check_cancel = function()
-        return running_commands[chat_id] and running_commands[chat_id].cancel
-    end
-
-    local res = exec_cmd('python3 "' .. parser_file .. '"', 300, check_cancel)
-
-    if running_commands[chat_id] and running_commands[chat_id].cancel then
-        safe_send(chat_id, "❌ Выполнение парсера отменено")
-    else
-        local temp_file = os.tmpname() .. ".txt"
-        local f = io.open(temp_file, "w")
-        if f then
-            f:write(res)
-            f:close()
-            safe_send_document(
-                chat_id,
-                temp_file,
-                "✅ Результат работы парсера " .. parser_name
-            )
-            os.remove(temp_file)
-        else
-            safe_send(chat_id, "❌ Ошибка создания временного файла")
-        end
-    end
-
-    running_commands[chat_id] = nil
-    return
-end
-
--- Запуск бота
 run_bot()
