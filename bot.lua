@@ -282,7 +282,8 @@ local function on_callback_query(callback, chat_id)
             return running_commands[chat_id] and running_commands[chat_id].cancel
         end
 
-        local res = exec_cmd('python3 "' .. parser_file .. '"', 300, check_cancel)
+        local venv_python = "/home/Geo/venv/bin/python"
+        local res = exec_cmd(venv_python .. ' "' .. parser_file .. '"', 300, check_cancel)
 
         if running_commands[chat_id] and running_commands[chat_id].cancel then
             safe_send(chat_id, "❌ Выполнение парсера отменено")
