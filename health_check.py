@@ -3,7 +3,7 @@ import sys
 import psycopg2
 import datetime
 
-DB_DSN = "dbname=igrf user=postgres password=1234 host=host.docker.internal port=5434"
+DB_DSN = "dbname=parser_db user=parser_user password=S3cureP@ssw0rd host=localhost port=5432"
 SCHEMA = 'public'
 DATE_CANDIDATES = ['date', 'datetime', 'dt', 'time_tag']
 STATION_CANDIDATES = ['station_id', 'magstation_id', 'iaga_code', 'name', 'id', 'channel']
