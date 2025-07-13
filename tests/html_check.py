@@ -8,7 +8,7 @@ from unittest import mock
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, '..'))
-PARSERS_DIR = os.path.join(PROJECT_ROOT, 'parsers')
+PARSERS_DIR = os.path.join(PROJECT_ROOT, '../Parsers/parsers')
 
 URL_PATTERN = re.compile(r"(?:http|https|ftp)://[\w\-./?&=%]+")
 SIMPLE_URL_PATTERN = re.compile(r"['\"]((?:http|https|ftp)://[^'\"\\s]+)['\"]")
@@ -28,11 +28,14 @@ FAKE_VALUES = {
     'until_year': '2025',
 }
 
+
 def substitute_fstring(fstring):
     def replacer(match):
         var_name = match.group(1)
         return FAKE_VALUES.get(var_name, 'TEST')
+
     return re.sub(r"\{(\w+)\}", replacer, fstring)
+
 
 def extract_urls_from_file(filepath):
     urls = set()
@@ -47,17 +50,19 @@ def extract_urls_from_file(filepath):
             substituted = substitute_fstring(fstr)
             urls.update(URL_PATTERN.findall(substituted))
 
-    # Исключаем ссылки с 'proxy' внутри
     urls = {url for url in urls if 'proxy' not in url.lower()}
 
     return urls
+
 
 def check_url(url):
     if 'proxy' in url.lower():
         return None, "Пропущена ссылка с proxy"
 
     try:
-        if re.match(r"^(http|https|ftp)://(localhost|127\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)", url):
+        if re.match(
+                r"^(http|https|ftp)://(localhost|127\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)",
+                url):
             return None, "Пропущена локальная ссылка"
 
         if url.startswith('ftp://'):
@@ -73,6 +78,7 @@ def check_url(url):
             return resp.ok, f"HTTP {resp.status_code}"
     except Exception as e:
         return False, str(e)
+
 
 def load_parser_module(parser_path):
     with mock.patch.dict(sys.modules, {
@@ -91,6 +97,7 @@ def load_parser_module(parser_path):
         sys.modules["parser_module"] = module
         spec.loader.exec_module(module)
         return module
+
 
 def main():
     report = []
@@ -131,7 +138,8 @@ def main():
                     except Exception:
                         pass
 
-                if hasattr(mod, 'BASE_URL') and isinstance(mod.BASE_URL, str) and mod.BASE_URL.startswith(('http', 'ftp')):
+                if hasattr(mod, 'BASE_URL') and isinstance(mod.BASE_URL, str) and mod.BASE_URL.startswith(
+                        ('http', 'ftp')):
                     if 'BASE_URL_TEMPLATE' not in mod.__dict__ and 'build_url' not in mod.__dict__:
                         urls_to_check.add(mod.BASE_URL)
 
@@ -146,13 +154,11 @@ def main():
                     extracted_urls = extract_urls_from_file(file_path)
                     urls_to_check.update(extracted_urls)
 
-        # Группируем ссылки по базовому URL (до '?')
         base_url_map = {}
         for url in urls_to_check:
             base_url = url.split('?', 1)[0]
             base_url_map.setdefault(base_url, []).append(url)
 
-        # Фильтруем: если есть сборочная (с параметрами) — простую не добавляем
         filtered_urls = set()
         for base_url, url_list in base_url_map.items():
             has_full = any('?' in u for u in url_list)
@@ -173,7 +179,6 @@ def main():
                 'info': msg
             })
 
-    # Итоговый отчёт
     print("Отчёт о проверке ссылок:")
     for idx, row in enumerate(report, 1):
         print(f"\n{idx}. Парсер: {row['parser']}")
@@ -182,6 +187,7 @@ def main():
         print(f"   Инфо: {row['info']}")
 
     print(f"\nИтого проверено: {len(report)} ссылок")
+
 
 if __name__ == '__main__':
     main()
